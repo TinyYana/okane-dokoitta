@@ -34,9 +34,18 @@ interface Bucket {
   resetAt: number;
 }
 
-/** 簡單固定窗口限流。ponytail: in-memory 單 process；多副本部署時改共用儲存（Postgres） */
+/**
+ * 固定窗口限流的計數狀態。**必須是模組層級**（不是 rateLimit() closure 內）：
+ * Worker 的 fetch 每個請求都重新呼叫 createApp() → 若 Map 建在 closure 裡，計數每個請求都歸零，
+ * 限流在 Cloudflare 上等於失效。放模組層級才能跨請求存活。
+ * keyFn 各自加前綴（global:/auth:/ai:…）分命名空間，所有 limiter 共用這個 Map 不相撞。
+ * ponytail: 單 isolate in-memory —— Node 單容器精確，Workers 多 isolate 為 best-effort（見 SECURITY §5 註）。
+ *   要嚴格跨 isolate 限流（例如開放公開註冊時的登入端點）改用 Cloudflare Rate Limiting binding 或 Durable Object。
+ */
+const rateLimitBuckets = new Map<string, Bucket>();
+
 export function rateLimit(options: { windowMs: number; max: number; keyFn: (c: Parameters<MiddlewareHandler>[0]) => string }): MiddlewareHandler {
-  const buckets = new Map<string, Bucket>();
+  const buckets = rateLimitBuckets;
   return async (c, next) => {
     const now = Date.now();
     const key = options.keyFn(c);
@@ -58,7 +67,11 @@ export function rateLimit(options: { windowMs: number; max: number; keyFn: (c: P
 }
 
 export function clientIp(c: Parameters<MiddlewareHandler>[0]): string {
-  // 反向代理後面（DEPLOYMENT §1）：信任 x-forwarded-for 第一個值
+  // Cloudflare 設定的 CF-Connecting-IP 用戶端無法偽造，優先採用 —— 否則攻擊者自帶
+  // x-forwarded-for 就能每個請求換一個限流 key，登入爆破/全域限流全被繞過。
+  const cfIp = c.req.header('cf-connecting-ip');
+  if (cfIp) return cfIp.trim();
+  // 自架反向代理（DEPLOYMENT §1）：代理須自行覆寫 x-forwarded-for，否則同樣可偽造。
   const forwarded = c.req.header('x-forwarded-for');
   if (forwarded) return forwarded.split(',')[0]!.trim();
   return 'local';

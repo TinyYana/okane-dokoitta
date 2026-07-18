@@ -723,6 +723,21 @@ async function updateAccount(tx: Db, user: MutationUser, m: MutationInput): Prom
     const [cc] = await tx.select().from(creditCards).where(eq(creditCards.accountId, current.id)).limit(1);
     if (!cc) throw invalid('ACCOUNT_NOT_FOUND', '信用卡資料不存在');
     ccBefore = cc;
+    // 與 createAccount 相同的擁有權驗證：update 之前漏了這兩個 FK，會讓使用者把卡指到
+    // 別人的額度群組/扣款帳戶（跨租戶 IDOR 寫入）。只在本次真的要改該欄位時檢查。
+    if (p.creditCard.limitGroupId) {
+      const [g] = await tx
+        .select({ id: creditLimitGroups.id })
+        .from(creditLimitGroups)
+        .where(and(eq(creditLimitGroups.id, p.creditCard.limitGroupId), eq(creditLimitGroups.userId, user.id), isNull(creditLimitGroups.deletedAt)))
+        .limit(1);
+      if (!g) throw invalid('ACCOUNT_NOT_FOUND', '共用額度群組不存在');
+    }
+    if (p.creditCard.autopayAccountId) {
+      const infos = await loadAccountInfos(tx, user.id, [p.creditCard.autopayAccountId]);
+      const autopay = infos.get(p.creditCard.autopayAccountId);
+      if (!autopay || autopay.kind !== 'asset') throw invalid('ACCOUNT_KIND_INVALID', '自動扣款帳戶必須是資產帳戶');
+    }
     const merged = {
       issuer: p.creditCard.issuer ?? cc.issuer,
       cardName: p.creditCard.cardName ?? cc.cardName,
