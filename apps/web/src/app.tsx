@@ -123,6 +123,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         <aside className="hidden py-8 md:block">
           <div className="sticky top-8">
             <a href="#/" className="block" aria-label="okane-dokoitta 首頁">
+              <img src="/logo.png" alt="" className="mb-2 h-9 w-9" />
               <div className="text-lg font-semibold tracking-tight">okane-dokoitta</div>
               <div className="mt-1 text-xs text-[var(--odk-muted)]">お金どこいった？</div>
               <SyncBadge status={syncStatus} />
@@ -132,7 +133,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </aside>
         <div className="min-w-0">
           <header className="flex items-center justify-between px-4 py-3 md:hidden">
-            <a href="#/" className="text-sm font-semibold tracking-tight">okane-dokoitta</a>
+            <a href="#/" className="flex items-center gap-2 text-sm font-semibold tracking-tight"><img src="/logo.png" alt="" className="h-6 w-6" />okane-dokoitta</a>
             <SyncBadge status={syncStatus} compact />
           </header>
           <main ref={pageRef} className="mx-auto w-full max-w-3xl px-4 pb-28 pt-2 md:px-0 md:pb-12 md:pt-8">{page}</main>

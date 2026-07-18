@@ -1,5 +1,4 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { argon2id, argon2Verify } from 'hash-wasm';
 import {
   countUsers,
   createAuthChallenge,
@@ -76,21 +75,37 @@ function isSecureDeployment(env: ApiEnv): boolean {
   return env.baseUrl !== null && env.baseUrl.startsWith('https://');
 }
 
-let dummyHashCache: string | null = null;
-async function argon2Hash(password: string): Promise<string> {
-  return argon2id({
-    password,
-    salt: randomBytes(16),
-    parallelism: 1,
-    iterations: 2,
-    memorySize: 19_456,
-    hashLength: 32,
-    outputType: 'encoded',
-  }) as Promise<string>;
+// 密碼雜湊：PBKDF2-HMAC-SHA256 走 Web Crypto（Workers 原生）。argon2/hash-wasm 在 Workers 上
+// 會因 runtime WASM 編譯被禁而拋 CompileError，無法用。格式自述以便日後調參數：
+//   pbkdf2$sha256$<iterations>$<salt base64url>$<derivedKey base64url>
+const PBKDF2_ITERATIONS = 600_000; // OWASP 2024（SHA-256）；可調高，改了不影響既有雜湊（iters 存在字串裡）
+const PBKDF2_KEYLEN = 32;
+
+async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, PBKDF2_KEYLEN * 8);
+  return new Uint8Array(bits);
 }
 
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16);
+  const dk = await pbkdf2(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2$sha256$${PBKDF2_ITERATIONS}$${salt.toString('base64url')}$${Buffer.from(dk).toString('base64url')}`;
+}
+
+async function verifyPassword(hash: string, password: string): Promise<boolean> {
+  const [scheme, algo, iters, saltB64, dkB64] = hash.split('$');
+  if (scheme !== 'pbkdf2' || algo !== 'sha256' || !iters || !saltB64 || !dkB64) return false;
+  const iterations = Number(iters);
+  if (!Number.isInteger(iterations) || iterations < 1) return false;
+  const expected = Buffer.from(dkB64, 'base64url');
+  const actual = Buffer.from(await pbkdf2(password, Buffer.from(saltB64, 'base64url'), iterations));
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+let dummyHashCache: string | null = null;
 async function dummyHash(): Promise<string> {
-  dummyHashCache ??= await argon2Hash('dummy-password-for-timing');
+  dummyHashCache ??= await hashPassword('dummy-password-for-timing');
   return dummyHashCache;
 }
 
@@ -135,7 +150,7 @@ export function authRoutes(db: Db, env: ApiEnv): Hono {
     if (!parsed.success) {
       return c.json({ error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? '輸入格式錯誤' } }, 422);
     }
-    const passwordHash = await argon2Hash(parsed.data.password); // 預設 argon2id
+    const passwordHash = await hashPassword(parsed.data.password);
     const result = await createFirstUserWithDefaults(db, {
       email: parsed.data.email,
       displayName: parsed.data.displayName ?? null,
@@ -158,7 +173,7 @@ export function authRoutes(db: Db, env: ApiEnv): Hono {
     if (!parsed.success) {
       return c.json({ error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? '輸入格式錯誤' } }, 422);
     }
-    const passwordHash = await argon2Hash(parsed.data.password);
+    const passwordHash = await hashPassword(parsed.data.password);
     const input = {
       email: parsed.data.email,
       displayName: parsed.data.displayName ?? null,
@@ -194,9 +209,9 @@ export function authRoutes(db: Db, env: ApiEnv): Hono {
     // 帳號不存在也跑一次 verify，避免 timing 差異洩漏帳號存在性
     let ok = false;
     if (cred?.passwordHash) {
-      ok = await argon2Verify({ hash: cred.passwordHash, password: parsed.data.password });
+      ok = await verifyPassword(cred.passwordHash, parsed.data.password);
     } else {
-      await argon2Verify({ hash: await dummyHash(), password: parsed.data.password }).catch(() => false);
+      await verifyPassword(await dummyHash(), parsed.data.password).catch(() => false);
     }
     if (!user || !ok) {
       return c.json({ error: { code: 'INVALID_CREDENTIALS', message: '帳號或密碼錯誤' } }, 401);

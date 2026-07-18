@@ -103,8 +103,8 @@ export function LoginPage({
   return (
     <div className="mx-auto grid min-h-dvh max-w-4xl content-center gap-10 px-6 py-12 md:grid-cols-[1fr_22rem] md:items-center">
       <div>
-        <p className="text-sm font-medium text-[var(--odk-accent)]">お金どこいった？</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">okane-dokoitta</h1>
+        <img src="/logo.png" alt="" className="mb-4 h-14 w-14" />
+        <img src="/wordmark.png" alt="お金どこいった？" className="h-12 w-auto max-w-full" />
         <p className="mt-5 text-xl font-medium">{mode === 'setup' ? '先把帳本建起來' : '錢花去哪，打開就知道'}</p>
         <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--odk-muted)]">
           {mode === 'setup' ? '第一個帳號會成為管理者' : '登入後就能接著記帳、分類和對帳'}
