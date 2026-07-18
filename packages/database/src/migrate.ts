@@ -6,7 +6,10 @@ import { migrate as pgMigrate } from 'drizzle-orm/node-postgres/migrator';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Db } from './client.js';
 
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+// import.meta.url 在 Cloudflare Workers runtime 是 undefined。migrate 只在 Node 執行，
+// 但 index.ts 會 re-export 本檔 → Worker 只是 import 就會跑到這行。不守住的話
+// fileURLToPath(undefined) 會在 Worker 啟動時 throw，讓整包部署失敗（deploy version 失敗）。
+const packageRoot = import.meta.url ? join(dirname(fileURLToPath(import.meta.url)), '..') : '.';
 
 /** drizzle migrations 目錄（產生的 SQL 隨 package 發佈） */
 export const MIGRATIONS_FOLDER = join(packageRoot, 'drizzle');
