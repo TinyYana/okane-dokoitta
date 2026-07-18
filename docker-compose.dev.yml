@@ -1,0 +1,16 @@
+# 本地開發：只起 PostgreSQL（DEPLOYMENT §5）
+# docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: okane
+      POSTGRES_USER: okane
+      POSTGRES_PASSWORD: okane-dev-only
+    ports:
+      - "5432:5432"
+    volumes:
+      - okane-db-dev:/var/lib/postgresql/data
+
+volumes:
+  okane-db-dev:

@@ -1,0 +1,39 @@
+{
+  "name": "@okane-dokoitta/api",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch scripts/dev-lite.ts",
+    "dev:postgres": "node --env-file-if-exists=../../.env --import tsx --watch src/server.ts",
+    "dev:lite": "node --env-file-if-exists=../../.env --import tsx scripts/dev-lite.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "migrate": "pnpm --filter @okane-dokoitta/database migrate"
+  },
+  "dependencies": {
+    "@block65/webcrypto-web-push": "^1.0.2",
+    "@hono/node-server": "^1.19.0",
+    "@okane-dokoitta/audit-engine": "workspace:*",
+    "@okane-dokoitta/database": "workspace:*",
+    "@okane-dokoitta/domain": "workspace:*",
+    "@okane-dokoitta/importers": "workspace:*",
+    "@okane-dokoitta/notifications": "workspace:*",
+    "@okane-dokoitta/schemas": "workspace:*",
+    "@simplewebauthn/server": "13.2.2",
+    "fflate": "^0.8.2",
+    "hash-wasm": "^4.12.0",
+    "hono": "^4.9.0",
+    "tsx": "^4.20.0",
+    "uuid": "^11.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0",
+    "@types/node": "^22.15.0",
+    "drizzle-orm": "^0.44.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

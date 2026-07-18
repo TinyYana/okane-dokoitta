@@ -1,0 +1,43 @@
+{
+  "name": "okane-dokoitta",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Open-source personal finance auditing and asset tracking.",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "env:local": "node scripts/generate-local-env.mjs",
+    "dev": "pnpm --parallel --filter @okane-dokoitta/api --filter @okane-dokoitta/web dev",
+    "test": "node --test scripts/backup-crypto.test.mjs && pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "build": "pnpm -r --if-present build",
+    "dev:cloudflare": "pnpm --filter @okane-dokoitta/web build && wrangler dev",
+    "deploy:cloudflare": "pnpm build && wrangler deploy",
+    "cf:types": "wrangler types apps/api/src/worker-configuration.d.ts",
+    "backup": "node scripts/backup.mjs backup",
+    "restore": "node scripts/backup.mjs restore"
+  },
+  "devDependencies": {
+    "@okane-dokoitta/config": "workspace:*",
+    "eslint": "^9.30.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.35.0",
+    "wrangler": "^4.112.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@peculiar/asn1-android": "2.7.0",
+      "@peculiar/asn1-ecc": "2.7.0",
+      "@peculiar/asn1-rsa": "2.7.0",
+      "@peculiar/asn1-schema": "2.7.0",
+      "@peculiar/asn1-x509": "2.7.0",
+      "@peculiar/utils": "2.0.2"
+    }
+  }
+}

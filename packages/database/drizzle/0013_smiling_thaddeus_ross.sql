@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "accounts_user_opening_balance_unique" ON "okane_dokoitta"."accounts" USING btree ("user_id") WHERE "okane_dokoitta"."accounts"."subtype" = 'opening_balance';

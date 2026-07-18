@@ -1,0 +1,1 @@
+ALTER TABLE "okane_dokoitta"."credit_cards" ALTER COLUMN "last4" DROP NOT NULL;

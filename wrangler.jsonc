@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "okane-dokoitta",
+  "main": "./apps/api/src/worker.ts",
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "upload_source_maps": true,
+  "assets": {
+    "directory": "./apps/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "REPLACE_WITH_HYPERDRIVE_ID"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "IMPORTS",
+      "bucket_name": "okane-dokoitta-imports"
+    }
+  ],
+  "triggers": {
+    // 第一組：匯入檔案 retention purge（每 6 小時）；第二組：M5 通知掃描（每小時，見 src/worker.ts NOTIFICATION_SCAN_CRON）
+    "crons": ["17 */6 * * *", "7 * * * *"]
+  },
+  "vars": {
+    "OKANE_DOKOITTA_REGISTRATION_MODE": "invite",
+    "OKANE_DOKOITTA_TZ": "Asia/Taipei",
+    "OKANE_DOKOITTA_IMPORT_RETENTION_DAYS": "90"
+  }
+}

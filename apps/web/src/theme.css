@@ -1,0 +1,192 @@
+@import 'tailwindcss';
+@source "../../../packages/ui/src";
+
+/* 「錢的去向」：平常安靜記帳，有差額時才用珊瑚色提醒 */
+:root {
+  color-scheme: light;
+  --odk-bg: hsl(164 38% 97%);
+  --odk-surface: hsl(0 0% 100%);
+  --odk-surface-2: hsl(164 34% 92%);
+  --odk-text: hsl(176 31% 15%);
+  --odk-muted: hsl(174 13% 39%);
+  --odk-line: hsl(168 20% 82%);
+  --odk-accent: hsl(168 58% 30%);
+  --odk-accent-ink: hsl(0 0% 100%);
+  --odk-accent-soft: hsl(164 48% 89%);
+  --odk-signal: hsl(10 74% 54%);
+  --odk-negative: hsl(355 66% 44%);
+  --odk-positive: hsl(166 64% 28%);
+  --odk-shadow: 0 18px 44px hsl(176 36% 18% / 0.08), 0 2px 8px hsl(176 36% 18% / 0.06);
+  /* 圖表第二色（例如淨資產甜甜圈的「投資」區塊）：跟 accent 相位角固定差 150°，
+     不管使用者把主題色調到哪個相位，這兩色都不會撞在一起。 */
+  --odk-chart-2: hsl(318 55% 42%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --odk-bg: hsl(176 29% 9%);
+    --odk-surface: hsl(175 25% 13%);
+    --odk-surface-2: hsl(174 23% 19%);
+    --odk-text: hsl(162 36% 96%);
+    --odk-muted: hsl(169 16% 70%);
+    --odk-line: hsl(173 17% 30%);
+    --odk-accent: hsl(162 54% 65%);
+    --odk-accent-ink: hsl(176 34% 10%);
+    --odk-accent-soft: hsl(169 30% 22%);
+    --odk-signal: hsl(12 83% 67%);
+    --odk-negative: hsl(352 100% 74%);
+    --odk-positive: hsl(166 62% 63%);
+    --odk-shadow: 0 18px 44px hsl(178 65% 3% / 0.4), 0 2px 8px hsl(178 65% 3% / 0.28);
+    --odk-chart-2: hsl(318 55% 68%);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --odk-bg: hsl(176 29% 9%);
+  --odk-surface: hsl(175 25% 13%);
+  --odk-surface-2: hsl(174 23% 19%);
+  --odk-text: hsl(162 36% 96%);
+  --odk-muted: hsl(169 16% 70%);
+  --odk-line: hsl(173 17% 30%);
+  --odk-accent: hsl(162 54% 65%);
+  --odk-accent-ink: hsl(176 34% 10%);
+  --odk-accent-soft: hsl(169 30% 22%);
+  --odk-signal: hsl(12 83% 67%);
+  --odk-negative: hsl(352 100% 74%);
+  --odk-positive: hsl(166 62% 63%);
+  --odk-shadow: 0 18px 44px hsl(178 65% 3% / 0.4), 0 2px 8px hsl(178 65% 3% / 0.28);
+  --odk-chart-2: hsl(318 55% 68%);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--odk-bg);
+  color: var(--odk-text);
+  font-family:
+    ui-rounded,
+    'Hiragino Maru Gothic ProN',
+    'PingFang TC',
+    'Noto Sans TC',
+    'Microsoft JhengHei',
+    system-ui,
+    sans-serif;
+  line-height: 1.55;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--odk-accent-soft);
+  color: var(--odk-text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--odk-accent);
+  outline-offset: 2px;
+}
+
+.odk-amount {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* 資產衛星球：手機放大觸控面與字體，桌面保留較緊湊的環狀比例。 */
+.odk-nw-sat {
+  /* 320px 窄機在四顆球位於上下左右時，120px 軌道兩側最多各剩 40px。 */
+  --odk-ball-rendered: min(var(--odk-ball-mobile), calc(100vw - 240px));
+  width: var(--odk-ball-rendered);
+  height: var(--odk-ball-rendered);
+  margin-left: calc(var(--odk-ball-x) - var(--odk-ball-rendered) / 2);
+  margin-top: calc(var(--odk-ball-y) - var(--odk-ball-rendered) / 2);
+}
+
+@media (min-width: 640px) {
+  .odk-nw-sat {
+    --odk-ball-rendered: var(--odk-ball-desktop);
+  }
+}
+
+/* 手機導覽是浮在內容上的小島，底下留出手機安全區，不做整片舊式底欄。 */
+.odk-mobile-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.odk-page-title {
+  letter-spacing: -0.02em;
+}
+
+.odk-break-anywhere {
+  overflow-wrap: anywhere;
+}
+
+dialog::backdrop {
+  background: hsl(176 36% 7% / 0.62);
+}
+
+/* 卡片式表面的統一景深；扁平無陰影是廉價感的主因之一 */
+.odk-panel {
+  box-shadow: var(--odk-shadow);
+}
+
+/* 小元件用的輕量陰影（數字鍵盤鍵帽）：同一套配方，只是縮小尺寸 */
+.odk-key-shadow {
+  box-shadow: 0 1px 2px hsl(176 36% 18% / 0.05), 0 3px 8px -3px hsl(176 36% 18% / 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .odk-key-shadow {
+    box-shadow: 0 1px 2px hsl(178 65% 3% / 0.35), 0 3px 10px -3px hsl(178 65% 3% / 0.5);
+  }
+}
+:root[data-theme='dark'] .odk-key-shadow {
+  box-shadow: 0 1px 2px hsl(178 65% 3% / 0.35), 0 3px 10px -3px hsl(178 65% 3% / 0.5);
+}
+
+/* 主題色相位滑桿（設定頁）：只調色相，飽和度/明度沿用配方，避免選到不可讀的組合 */
+.odk-hue-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    hsl(0 55% 45%),
+    hsl(60 55% 45%),
+    hsl(120 55% 45%),
+    hsl(180 55% 45%),
+    hsl(240 55% 45%),
+    hsl(300 55% 45%),
+    hsl(360 55% 45%)
+  );
+}
+.odk-hue-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--odk-surface);
+  border: 3px solid var(--odk-accent);
+  box-shadow: var(--odk-shadow);
+  cursor: pointer;
+}
+.odk-hue-slider::-moz-range-thumb {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--odk-surface);
+  border: 3px solid var(--odk-accent);
+  box-shadow: var(--odk-shadow);
+  cursor: pointer;
+}

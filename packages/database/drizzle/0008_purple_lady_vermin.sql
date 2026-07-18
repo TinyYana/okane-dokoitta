@@ -1,0 +1,1 @@
+ALTER TABLE "okane_dokoitta"."accounts" ADD COLUMN "institution" text;

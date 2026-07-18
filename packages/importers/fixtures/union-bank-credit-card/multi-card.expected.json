@@ -1,0 +1,16 @@
+{
+  "importerId": "union-bank-credit-card",
+  "institution": "聯邦銀行",
+  "periodStart": "2026-06-16",
+  "periodEnd": "2026-07-15",
+  "statementDate": "2026-07-15",
+  "dueDate": "2026-08-03",
+  "totalMinor": "600",
+  "currency": "TWD",
+  "transactions": [
+    { "institution": "聯邦銀行", "merchantRaw": "彼岸花書店", "amountMinor": "300", "currency": "TWD", "type": "purchase", "occurredAt": "2026-07-02", "postedAt": "2026-07-03", "cardLast4": "2468" },
+    { "institution": "聯邦銀行", "merchantRaw": "月光商店", "amountMinor": "300", "currency": "TWD", "type": "purchase", "occurredAt": "2026-07-03", "postedAt": "2026-07-04", "cardLast4": "1357" },
+    { "institution": "聯邦銀行", "merchantRaw": "國外交易手續費", "amountMinor": "5", "currency": "TWD", "type": "fee", "occurredAt": "2026-07-03", "postedAt": "2026-07-04", "cardLast4": "1357" },
+    { "institution": "聯邦銀行", "merchantRaw": "信用卡回饋", "amountMinor": "-5", "currency": "TWD", "type": "other", "occurredAt": "2026-07-04", "postedAt": "2026-07-05", "cardLast4": "1357" }
+  ]
+}

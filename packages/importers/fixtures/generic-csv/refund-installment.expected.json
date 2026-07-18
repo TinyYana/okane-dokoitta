@@ -1,0 +1,22 @@
+{
+  "importerId": "generic-csv",
+  "currency": "USD",
+  "transactions": [
+    {
+      "occurredAt": "2026-07-03",
+      "merchantRaw": "Fictional, Store",
+      "amountMinor": "1234",
+      "currency": "USD",
+      "type": "installment",
+      "installment": { "current": 2, "total": 3 }
+    },
+    {
+      "occurredAt": "2026-07-04",
+      "merchantRaw": "Sample Refund",
+      "amountMinor": "-100",
+      "currency": "USD",
+      "type": "refund"
+    }
+  ],
+  "warningLines": [4]
+}

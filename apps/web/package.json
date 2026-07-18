@@ -1,0 +1,38 @@
+{
+  "name": "@okane-dokoitta/web",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@okane-dokoitta/domain": "workspace:*",
+    "@okane-dokoitta/schemas": "workspace:*",
+    "@okane-dokoitta/sync": "workspace:*",
+    "@okane-dokoitta/ui": "workspace:*",
+    "@simplewebauthn/browser": "13.2.2",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.25.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-pwa": "^1.0.0",
+    "vitest": "^3.2.0",
+    "workbox-precaching": "^7.4.0",
+    "workbox-routing": "^7.4.0"
+  }
+}

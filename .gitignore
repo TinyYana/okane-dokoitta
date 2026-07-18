@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+.wrangler/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+.dev.vars*
+!.dev.vars.example
+
+# typescript
+*.tsbuildinfo
+
+# pwa dev output
+dev-dist/
+
+# test & coverage
+coverage/
+playwright-report/
+test-results/
+.playwright-cli/
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.local
+
+# runtime
+*.log
+uploads/
+tmp/
+.dev-data/
+.dev-data.*/
+.test-data/

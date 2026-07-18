@@ -1,0 +1,15 @@
+{
+  "importerId": "union-bank-credit-card",
+  "institution": "聯邦銀行",
+  "cardLast4": "2468",
+  "periodStart": "2024-12-16",
+  "periodEnd": "2025-01-15",
+  "statementDate": "2025-01-15",
+  "dueDate": "2025-02-03",
+  "totalMinor": "50",
+  "currency": "TWD",
+  "transactions": [
+    { "institution": "聯邦銀行", "merchantRaw": "商店, 分店", "amountMinor": "100", "currency": "TWD", "type": "purchase", "occurredAt": "2024-12-31", "postedAt": "2025-01-02", "cardLast4": "2468" },
+    { "institution": "聯邦銀行", "merchantRaw": "退貨退款", "amountMinor": "-50", "currency": "TWD", "type": "refund", "occurredAt": "2025-01-02", "postedAt": "2025-01-03", "cardLast4": "2468" }
+  ]
+}

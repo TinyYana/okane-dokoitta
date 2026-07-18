@@ -1,0 +1,22 @@
+{
+  "importerId": "generic-csv",
+  "currency": "TWD",
+  "transactions": [
+    {
+      "occurredAt": "2026-07-01",
+      "merchantRaw": "假商店甲",
+      "amountMinor": "3000000000",
+      "currency": "TWD",
+      "type": "purchase",
+      "cardLast4": "4242"
+    },
+    {
+      "occurredAt": "2026-07-02",
+      "merchantRaw": "假商店乙",
+      "amountMinor": "1",
+      "currency": "TWD",
+      "type": "purchase",
+      "cardLast4": "4242"
+    }
+  ]
+}

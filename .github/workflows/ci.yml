@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: okane_test
+          POSTGRES_USER: okane
+          POSTGRES_PASSWORD: okane
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U okane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # L1/L2（無外部依賴）+ L3（真實 PostgreSQL）
+      - run: pnpm test
+        env:
+          OKANE_DOKOITTA_TEST_DATABASE_URL: postgres://okane:okane@localhost:5432/okane_test
+      - run: pnpm build

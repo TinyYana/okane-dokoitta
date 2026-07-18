@@ -1,0 +1,20 @@
+{
+  "importerId": "generic-text",
+  "currency": "TWD",
+  "transactions": [
+    {
+      "occurredAt": "2026-07-01",
+      "merchantRaw": "假咖啡店",
+      "amountMinor": "185",
+      "currency": "TWD",
+      "type": "purchase"
+    },
+    {
+      "occurredAt": "2026-07-02",
+      "merchantRaw": "假退款店",
+      "amountMinor": "-20",
+      "currency": "TWD",
+      "type": "refund"
+    }
+  ]
+}

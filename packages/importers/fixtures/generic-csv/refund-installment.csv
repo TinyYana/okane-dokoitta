@@ -1,0 +1,4 @@
+date,merchant,amount,currency,type,installment
+2026-07-03,"Fictional, Store",12.34,USD,installment,2/3
+2026-07-04,Sample Refund,-1.00,USD,refund,
+2026/07/05,Bad Date,5.00,USD,purchase,

@@ -1,0 +1,48 @@
+# 自架參考拓撲（DEPLOYMENT §1）：一個 app 容器 + 一個 postgres 容器。
+# TLS 由使用者的反向代理（Caddy/Traefik/Nginx）或 Cloudflare Tunnel 終結。
+# 環境變數值放 .env（見 .env.example），不要寫死在本檔。
+services:
+  app:
+    image: ghcr.io/tinyyana/okane-dokoitta:latest
+    build: .
+    environment:
+      OKANE_DOKOITTA_ROLES: ${OKANE_DOKOITTA_ROLES:-api}
+      OKANE_DOKOITTA_DATABASE_URL: ${OKANE_DOKOITTA_DATABASE_URL}
+      OKANE_DOKOITTA_MIGRATE_DATABASE_URL: ${OKANE_DOKOITTA_MIGRATE_DATABASE_URL}
+      OKANE_DOKOITTA_BASE_URL: ${OKANE_DOKOITTA_BASE_URL}
+      OKANE_DOKOITTA_SESSION_SECRET: ${OKANE_DOKOITTA_SESSION_SECRET}
+      OKANE_DOKOITTA_FILE_KEY: ${OKANE_DOKOITTA_FILE_KEY}
+      OKANE_DOKOITTA_REGISTRATION_MODE: ${OKANE_DOKOITTA_REGISTRATION_MODE:-invite}
+      OKANE_DOKOITTA_IMPORT_RETENTION_DAYS: ${OKANE_DOKOITTA_IMPORT_RETENTION_DAYS:-90}
+      OKANE_DOKOITTA_DATA_DIR: /data
+      OKANE_DOKOITTA_TZ: ${OKANE_DOKOITTA_TZ:-Asia/Taipei}
+      OKANE_DOKOITTA_FINNHUB_TOKEN: ${OKANE_DOKOITTA_FINNHUB_TOKEN:-}
+      # 選配整合：留空＝安靜停用（.env.example）
+      OKANE_DOKOITTA_DISCORD_APP_ID: ${OKANE_DOKOITTA_DISCORD_APP_ID:-}
+      OKANE_DOKOITTA_DISCORD_PUBLIC_KEY: ${OKANE_DOKOITTA_DISCORD_PUBLIC_KEY:-}
+      OKANE_DOKOITTA_DISCORD_BOT_TOKEN: ${OKANE_DOKOITTA_DISCORD_BOT_TOKEN:-}
+      OKANE_DOKOITTA_DISCORD_CLIENT_SECRET: ${OKANE_DOKOITTA_DISCORD_CLIENT_SECRET:-}
+      OKANE_DOKOITTA_VAPID_PUBLIC_KEY: ${OKANE_DOKOITTA_VAPID_PUBLIC_KEY:-}
+      OKANE_DOKOITTA_VAPID_PRIVATE_KEY: ${OKANE_DOKOITTA_VAPID_PRIVATE_KEY:-}
+      OKANE_DOKOITTA_VAPID_CONTACT_EMAIL: ${OKANE_DOKOITTA_VAPID_CONTACT_EMAIL:-}
+    volumes:
+      - okane-data:/data
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: okane
+      POSTGRES_USER: okane
+      POSTGRES_PASSWORD: ${OKANE_DOKOITTA_DB_PASSWORD}
+    volumes:
+      - okane-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  okane-data:
+  okane-db:

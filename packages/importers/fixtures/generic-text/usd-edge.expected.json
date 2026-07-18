@@ -1,0 +1,21 @@
+{
+  "importerId": "generic-text",
+  "currency": "USD",
+  "transactions": [
+    {
+      "occurredAt": "2026-07-03",
+      "merchantRaw": "Fictional Shop",
+      "amountMinor": "1",
+      "currency": "USD",
+      "type": "purchase"
+    },
+    {
+      "occurredAt": "2026-07-04",
+      "merchantRaw": "Sample Refund",
+      "amountMinor": "-250",
+      "currency": "USD",
+      "type": "refund"
+    }
+  ],
+  "warningLines": [3]
+}
