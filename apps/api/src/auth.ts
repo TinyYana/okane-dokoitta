@@ -78,7 +78,11 @@ function isSecureDeployment(env: ApiEnv): boolean {
 // 密碼雜湊：PBKDF2-HMAC-SHA256 走 Web Crypto（Workers 原生）。argon2/hash-wasm 在 Workers 上
 // 會因 runtime WASM 編譯被禁而拋 CompileError，無法用。格式自述以便日後調參數：
 //   pbkdf2$sha256$<iterations>$<salt base64url>$<derivedKey base64url>
-const PBKDF2_ITERATIONS = 600_000; // OWASP 2024（SHA-256）；可調高，改了不影響既有雜湊（iters 存在字串裡）
+// Cloudflare Workers 對單次 PBKDF2 迭代數硬性上限 100000（超過丟 NotSupportedError），
+// 且免費方案每請求只有 10ms CPU —— 100000 是這平台實際能用的上限。低於 OWASP 2023 的
+// 600k，但主要登入是 Passkey、密碼只是備援，加上 16 byte 隨機 salt，對自架個人站可接受。
+// iters 存在雜湊字串裡，付費方案想調高可再用分段疊代（每段 ≤100000）。
+const PBKDF2_ITERATIONS = 100_000;
 const PBKDF2_KEYLEN = 32;
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
