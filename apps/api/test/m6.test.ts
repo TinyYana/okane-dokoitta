@@ -72,6 +72,31 @@ describe('M6 AI 輔助層（BYOK、AI-1~4）', () => {
     expect(String(fetchSpy!.mock.calls[0]![0])).toBe('https://ai.example.com/v1/chat/completions');
   });
 
+  it('分兩步驟：先存端點與模型，之後單獨勾選啟用要能持久化', async () => {
+    expect((await client.post('/api/ai/settings', {
+      baseUrl: 'https://ai.example.com/v1', model: 'test-model',
+    })).status).toBe(200);
+    const enableRes = await client.post('/api/ai/settings', {
+      enabled: true, baseUrl: 'https://ai.example.com/v1', model: 'test-model',
+    });
+    expect(enableRes.status).toBe(200);
+    expect(await enableRes.json()).toMatchObject({ enabled: true });
+    const settings = await (await client.get('/api/ai/settings')).json();
+    expect(settings).toMatchObject({ enabled: true });
+  });
+
+  it('併發：勾選啟用與另一個不含 enabled 的儲存同時送出，enabled 不能被舊值蓋掉', async () => {
+    await client.post('/api/ai/settings', { baseUrl: 'https://race.example.com/v1', model: 'race-model' });
+    const [a, b] = await Promise.all([
+      client.post('/api/ai/settings', { enabled: true, baseUrl: 'https://race.example.com/v1', model: 'race-model' }),
+      client.post('/api/ai/settings', { baseUrl: 'https://race.example.com/v1', model: 'race-model' }),
+    ]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    const settings = await (await client.get('/api/ai/settings')).json();
+    expect(settings).toMatchObject({ enabled: true });
+  });
+
   it('BYOK 設定：key 加密儲存、讀取永不回傳 key（AI-4）', async () => {
     const save = await client.post('/api/ai/settings', {
       enabled: true, baseUrl: 'https://ai.example.com/v1', model: 'test-model', apiKey: 'sk-secret-key-123',

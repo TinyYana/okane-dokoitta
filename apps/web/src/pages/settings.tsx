@@ -660,7 +660,7 @@ function AiSection() {
           </Button>
         ) : null}
         <label className="ml-auto flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={settings.enabled} onChange={(e) => void save({ enabled: e.target.checked })} />
+          <input type="checkbox" checked={settings.enabled} disabled={busy} onChange={(e) => void save({ enabled: e.target.checked })} />
           啟用 AI 輔助
         </label>
       </div>

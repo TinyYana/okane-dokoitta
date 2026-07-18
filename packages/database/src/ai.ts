@@ -19,11 +19,14 @@ export async function getAiSettings(db: Db, userId: string): Promise<AiSettingsV
     : DEFAULT_AI_SETTINGS;
 }
 
+/** set 只寫 patch 實際帶到的欄位（而非整個 merged）—— 否則兩個請求交錯時，沒碰某欄位的那個
+ * 請求會用自己讀到的舊值把它蓋回去（lost update）。回傳也改用 DB 寫入後的真實值，不用樂觀算出的 merged。 */
 export async function saveAiSettings(db: Db, userId: string, patch: Partial<AiSettingsValue>): Promise<AiSettingsValue> {
   const merged = { ...(await getAiSettings(db, userId)), ...patch };
-  await db
+  const [row] = await db
     .insert(aiSettings)
     .values({ userId, ...merged, updatedAt: new Date() })
-    .onConflictDoUpdate({ target: aiSettings.userId, set: { ...merged, updatedAt: new Date() } });
-  return merged;
+    .onConflictDoUpdate({ target: aiSettings.userId, set: { ...patch, updatedAt: new Date() } })
+    .returning();
+  return { enabled: row!.enabled, baseUrl: row!.baseUrl, model: row!.model, apiKeyEncrypted: row!.apiKeyEncrypted };
 }

@@ -115,17 +115,26 @@ export async function getNotificationPreferences(db: Db, userId: string): Promis
     : DEFAULT_NOTIFICATION_PREFERENCES;
 }
 
+/** set 只寫 patch 實際帶到的欄位，避免併發請求用自己讀到的舊值互相蓋掉（同 ai.ts saveAiSettings）。 */
 export async function saveNotificationPreferences(
   db: Db,
   userId: string,
   patch: Partial<NotificationPreferencesValue>,
 ): Promise<NotificationPreferencesValue> {
   const merged = { ...(await getNotificationPreferences(db, userId)), ...patch };
-  await db
+  const [row] = await db
     .insert(notificationPreferences)
     .values({ userId, ...merged, updatedAt: new Date() })
-    .onConflictDoUpdate({ target: notificationPreferences.userId, set: { ...merged, updatedAt: new Date() } });
-  return merged;
+    .onConflictDoUpdate({ target: notificationPreferences.userId, set: { ...patch, updatedAt: new Date() } })
+    .returning();
+  return {
+    privacyMode: row!.privacyMode,
+    discordEnabled: row!.discordEnabled,
+    webPushEnabled: row!.webPushEnabled,
+    quietHoursStartMinute: row!.quietHoursStartMinute,
+    quietHoursEndMinute: row!.quietHoursEndMinute,
+    mutedEventTypes: row!.mutedEventTypes,
+  };
 }
 
 /** 給排程用：只掃有至少一個可用通道的使用者，避免白跑。 */
