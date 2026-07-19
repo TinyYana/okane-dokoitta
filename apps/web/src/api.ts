@@ -17,10 +17,13 @@ import {
 /** 同源 cookie session + CSRF；離線寫入先落 IndexedDB outbox。 */
 
 let csrfToken = '';
-let syncTask: Promise<void> | null = null;
+let syncChain: Promise<void> = Promise.resolve();
 let syncStarted = false;
+let deviceRegistered = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let activeUserId: string | null = null;
 const outcomes = new Map<string, MutationResponse>();
+const RETRY_MS = 15_000;
 
 export interface SyncStatus {
   phase: 'online' | 'syncing' | 'offline';
@@ -48,11 +51,13 @@ export function setCsrfToken(token: string): void {
 
 export async function configureUserContext(userId: string): Promise<void> {
   activeUserId = userId;
+  deviceRegistered = false;
   await setOfflineUser(userId);
 }
 
 export function clearUserContext(): void {
   activeUserId = null;
+  deviceRegistered = false;
   outcomes.clear();
   clearOfflineUser();
 }
@@ -129,9 +134,7 @@ export async function mutate(
     clientAt: new Date().toISOString(),
   };
   await queueMutation(mutation);
-  await refreshSyncStatus(navigator.onLine ? 'syncing' : 'offline');
-  if (!navigator.onLine) return { mutationId: mutation.mutationId, result: 'queued' };
-
+  // iOS PWA 的 navigator.onLine 常誤報離線——一律直接嘗試送出，失敗才算離線
   await syncNow();
   const outcome = outcomes.get(mutation.mutationId);
   outcomes.delete(mutation.mutationId);
@@ -149,16 +152,18 @@ export async function startSync(): Promise<void> {
   if (!syncStarted) {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    document.addEventListener('visibilitychange', onVisible);
     syncStarted = true;
   }
-  if (navigator.onLine) await syncNow();
-  else await refreshSyncStatus('offline');
+  await syncNow();
 }
 
 export function stopSync(): void {
   if (!syncStarted) return;
   window.removeEventListener('online', onOnline);
   window.removeEventListener('offline', onOffline);
+  document.removeEventListener('visibilitychange', onVisible);
+  if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
   syncStarted = false;
 }
 
@@ -172,14 +177,15 @@ export function getSyncStatus(): SyncStatus {
   return currentSyncStatus;
 }
 
+// 序列化而非搭便車：mutate 排進 outbox 後呼叫 syncNow，保證有一輪「在它之後開始」的
+// runSync 會處理到它——舊版撞到進行中的同步就直接回傳，mutation 卡在 outbox 沒人送。
 export function syncNow(): Promise<void> {
-  if (syncTask) return syncTask;
-  syncTask = runSync().finally(() => { syncTask = null; });
-  return syncTask;
+  const run = syncChain.then(runSync, runSync);
+  syncChain = run.catch(() => {});
+  return run;
 }
 
 async function runSync(): Promise<void> {
-  if (!navigator.onLine) return refreshSyncStatus('offline');
   await refreshSyncStatus('syncing');
   try {
     await registerCurrentDevice();
@@ -194,8 +200,18 @@ async function runSync(): Promise<void> {
     await refreshSyncStatus('online');
   } catch (error) {
     await refreshSyncStatus(isNetworkFailure(error) ? 'offline' : 'online');
+    if (currentSyncStatus.queued > 0) scheduleRetry();
     if (!isNetworkFailure(error)) throw error;
   }
+}
+
+/** 離線/失敗後的補送：15 秒後再試，成功那輪會清掉 outbox 就不再排 */
+function scheduleRetry(): void {
+  if (retryTimer !== null || !syncStarted) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void syncNow().catch(() => {});
+  }, RETRY_MS);
 }
 
 async function mutationRequest(mutation: SyncMutation): Promise<MutationResponse> {
@@ -222,11 +238,13 @@ async function mutationRequest(mutation: SyncMutation): Promise<MutationResponse
 }
 
 async function registerCurrentDevice(): Promise<void> {
+  if (deviceRegistered) return; // 每個 session 註冊一次就好，省每輪同步一趟 round trip
   await networkRequest('POST', '/api/sync/devices/register', {
     id: currentDeviceId(),
     name: deviceName(),
     platform: navigator.userAgent.slice(0, 80),
   });
+  deviceRegistered = true;
 }
 
 function onOnline(): void {
@@ -237,6 +255,15 @@ function onOnline(): void {
 
 function onOffline(): void {
   void refreshSyncStatus('offline');
+}
+
+/** iOS PWA 從背景切回來不會發 online 事件，用 visibilitychange 補一輪同步 */
+function onVisible(): void {
+  if (document.visibilityState === 'visible') {
+    void syncNow().catch((error: unknown) => {
+      console.warn('背景同步失敗', error instanceof ApiError ? error.code : 'UNKNOWN');
+    });
+  }
 }
 
 async function refreshSyncStatus(phase: SyncStatus['phase']): Promise<void> {
