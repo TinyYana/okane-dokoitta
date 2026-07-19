@@ -203,6 +203,35 @@ describe('M5 Discord：簽章驗證、帳號連結、指令、通知偏好', () 
     expect(status.linked).toBe(false);
   });
 
+  it('管理者可用正式站現有的 env.discord 重新註冊 /finance 指令，不用另外貼 Bot Token', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === `https://discord.com/api/v10/applications/${env.discord!.appId}/commands`) {
+        expect(init?.method).toBe('PUT');
+        expect((init?.headers as Record<string, string>)['Authorization']).toBe(`Bot ${env.discord!.botToken}`);
+        const body = JSON.parse(String(init?.body)) as Array<{ name: string }>;
+        expect(body[0]?.name).toBe('finance');
+        return new Response('{}', { status: 200 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    try {
+      const res = await client.post('/api/discord/admin/register-commands');
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; commandCount: number };
+      expect(body).toMatchObject({ ok: true, commandCount: 1 });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('未登入不能觸發指令註冊', async () => {
+    const anon = new TestClient((request) => createApp(db, env).fetch(request));
+    const res = await anon.post('/api/discord/admin/register-commands');
+    expect(res.status).toBe(401);
+  });
+
   async function createCashAccount(): Promise<string> {
     const id = uuidv7();
     await client.post('/api/mutations', mutation('accounts', 'create', id, { kind: 'asset', subtype: 'cash', name: '現金', currency: 'TWD' }));

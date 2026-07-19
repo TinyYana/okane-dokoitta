@@ -170,6 +170,25 @@ export function discordRoutes(db: Db, env: ApiEnv): Hono {
     return c.json({ linked: link !== null, discordUsername: link?.discordUsername ?? null, enabled: env.discord !== null });
   });
 
+  // ---- 管理：把 /finance 指令註冊到 Discord（一次性，或指令定義變更時重跑；冪等 PUT）----
+  // 不用另外把 App ID/Bot Token 貼進終端機——正式站已經有 env.discord，直接用自己的設定打 Discord API。
+  app.post('/admin/register-commands', async (c) => {
+    const auth = await resolveSession(db, env, getCookie(c, SESSION_COOKIE));
+    if (!auth) return c.json({ error: { code: 'UNAUTHENTICATED', message: '請先登入' } }, 401);
+    if (!checkCsrf(auth, c.req.header(CSRF_HEADER))) return c.json({ error: { code: 'CSRF_INVALID', message: 'CSRF token 無效' } }, 403);
+    if (!env.discord) return c.json({ error: { code: 'DISCORD_NOT_CONFIGURED', message: 'Discord 整合尚未設定' } }, 503);
+    const res = await fetch(`https://discord.com/api/v10/applications/${env.discord.appId}/commands`, {
+      method: 'PUT',
+      headers: { Authorization: `Bot ${env.discord.botToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(FINANCE_COMMANDS),
+    });
+    if (!res.ok) {
+      console.error(`[discord] register-commands -> HTTP ${res.status}`);
+      return c.json({ error: { code: 'DISCORD_UPSTREAM_FAILED', message: `Discord 回應 HTTP ${res.status}` } }, 502);
+    }
+    return c.json({ ok: true, commandCount: FINANCE_COMMANDS.length });
+  });
+
   // ---- 反向連結：`/finance link` 產生的一次性 URL，登入中的瀏覽器打開即完成綁定 ----
   app.get('/link/consume', async (c) => {
     const auth = await resolveSession(db, env, getCookie(c, SESSION_COOKIE));
@@ -199,6 +218,35 @@ function hashLinkToken(secret: string, token: string): string {
 }
 
 // ---------- Slash command 分派 ----------
+
+/** 註冊到 Discord 的指令定義；子指令名稱要跟下面 handleFinanceCommand 的 switch 一致。
+ * 跟 scripts/discord-register-commands.mjs 是同一份定義（那支給沒有已部署 env.discord 可用的自架環境，例如本機測試）——改這裡記得同步改那邊。 */
+const FINANCE_COMMANDS = [
+  {
+    name: 'finance',
+    description: '記帳查詢與提醒（財務資訊只出現在私訊或僅自己可見的回覆）',
+    options: [
+      { type: 1, name: 'status', description: '總覽摘要' },
+      { type: 1, name: 'networth', description: '淨資產與資料時間' },
+      { type: 1, name: 'upcoming', description: '未來 14 天預計扣款與繳款' },
+      { type: 1, name: 'cards', description: '各卡結帳／繳款日與本期金額' },
+      { type: 1, name: 'pending', description: '未確認交易與預計交易' },
+      { type: 1, name: 'audit-status', description: '最近對帳狀態與差額' },
+      { type: 1, name: 'reminders', description: '提醒設定總覽' },
+      {
+        type: 1,
+        name: 'add',
+        description: '快速記一筆草稿（回 PWA 確認才入帳）',
+        options: [
+          { type: 3, name: 'amount', description: '金額，例：120', required: true },
+          { type: 3, name: 'note', description: '備註／商家，例：午餐', required: false },
+        ],
+      },
+      { type: 1, name: 'confirm', description: '列出待確認的預計扣款，逐筆按鈕確認' },
+      { type: 1, name: 'link', description: '把這個 Discord 帳號連結到記帳帳號' },
+    ],
+  },
+];
 
 async function handleFinanceCommand(
   db: Db,

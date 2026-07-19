@@ -147,13 +147,17 @@ https://okane.example.com/api/discord/interactions
 
 儲存時 Discord 會打一發驗證請求——你的服務要先跑著、HTTPS 要通，才會儲存成功。
 
-### 6.4 註冊 /finance 指令（一次性）
+### 6.4 註冊 /finance 指令（一次性，或指令定義變更時重跑）
+
+服務已經跑起來、`.env`／secret 也設定好了以後，直接到記帳網站「設定 → Discord 與通知」按**重新註冊指令**——正式站用自己已有的設定去打 Discord API，不用再把 App ID／Bot Token 貼到終端機。
+
+沒有已部署站台可以打這顆按鈕的情境（例如還沒 `docker compose up -d`，或想在本機單獨跑一次），才用腳本：
 
 ```bash
 docker compose run --rm app node /app/scripts/discord-register-commands.mjs
 ```
 
-（或在任何有 Node 的機器上，設好那兩個環境變數後 `node scripts/discord-register-commands.mjs`。全域指令生效最多要等約 1 小時。）
+（或在任何有 Node 的機器上，設好那兩個環境變數後 `node scripts/discord-register-commands.mjs`。）全域指令生效最多要等約 1 小時；兩種方式都是冪等的 `PUT`，重跑無害。
 
 ### 6.5 邀請 bot、連結帳號
 

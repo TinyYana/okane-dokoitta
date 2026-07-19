@@ -418,6 +418,7 @@ function DiscordNotificationsSection() {
   const [discord, setDiscord] = useState<DiscordStatus | null>(null);
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [commandsBusy, setCommandsBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [prefsResult, discordResult, subscription] = await Promise.all([
@@ -459,6 +460,19 @@ function DiscordNotificationsSection() {
       toast('已撤銷 Discord 連結');
     } catch (error) {
       toast(messageOf(error, '撤銷失敗'), 'error');
+    }
+  }
+
+  // 註冊 /finance 指令（一次性，或指令定義更新後重跑）：直接用正式站已有的 Discord 設定，不用另外貼 Bot Token
+  async function registerDiscordCommands() {
+    setCommandsBusy(true);
+    try {
+      const result = await api.post<{ commandCount: number }>('/api/discord/admin/register-commands');
+      toast(`已註冊 ${result.commandCount} 組指令，Discord 全域生效最多等 1 小時`, 'ok');
+    } catch (error) {
+      toast(messageOf(error, '指令註冊失敗'), 'error');
+    } finally {
+      setCommandsBusy(false);
     }
   }
 
@@ -510,6 +524,14 @@ function DiscordNotificationsSection() {
             {discord.enabled ? <Button variant="primary" onClick={() => void linkDiscord()}>連結 Discord</Button> : null}
           </div>
         )}
+        {discord.enabled ? (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--odk-line)] pt-3 text-xs text-[var(--odk-muted)]">
+            <span>指令定義有更新，或第一次設定時要註冊 /finance 指令</span>
+            <Button disabled={commandsBusy} onClick={() => void registerDiscordCommands()}>
+              {commandsBusy ? '註冊中…' : '重新註冊指令'}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <Field label="隱私模式" hint="套用到所有 Discord 指令與通知的金額顯示">

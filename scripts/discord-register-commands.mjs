@@ -1,8 +1,11 @@
 /**
  * 把 /finance slash 指令註冊到 Discord（一次性，指令定義變更時再跑）。
+ * 已部署到 Cloudflare Workers 的環境優先用 PWA「設定 → Discord 與通知」的「重新註冊指令」按鈕
+ * （呼叫 POST /api/discord/admin/register-commands，直接用正式站已有的 env.discord，不用把 Bot Token
+ * 貼到終端機）。這支腳本留給沒有已部署 env.discord 可用的情境（例如本機 docker-compose 自架）。
  * 用法：設好環境變數後 `node scripts/discord-register-commands.mjs`
  *   OKANE_DOKOITTA_DISCORD_APP_ID、OKANE_DOKOITTA_DISCORD_BOT_TOKEN
- * 子指令清單要跟 apps/api/src/discord-routes.ts 的 handleFinanceCommand 一致。
+ * 子指令清單要跟 apps/api/src/discord-routes.ts 的 FINANCE_COMMANDS 一致。
  */
 const appId = process.env.OKANE_DOKOITTA_DISCORD_APP_ID;
 const botToken = process.env.OKANE_DOKOITTA_DISCORD_BOT_TOKEN;
