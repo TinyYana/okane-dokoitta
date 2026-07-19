@@ -441,7 +441,24 @@ function NetWorthCard() {
     return () => media.revert();
   }, [data]);
 
-  if (!data) return null;
+  if (!data) {
+    // 保留跟載入後同樣的高度，避免資料回來時整頁往下跳（ui-complexity：靜態佔位比空白更穩）
+    return (
+      <div className="relative h-[21.5rem]">
+        <div
+          className="odk-nw-core absolute left-1/2 top-1/2 animate-pulse rounded-full"
+          style={{
+            marginLeft: -CORE_RADIUS,
+            marginTop: -CORE_RADIUS,
+            width: CORE_RADIUS * 2,
+            height: CORE_RADIUS * 2,
+            background: 'var(--odk-accent-soft)',
+          }}
+          aria-hidden="true"
+        />
+      </div>
+    );
+  }
   const netWorth = BigInt(data.netWorthMinor);
   const outflow = BigInt(data.upcomingOutflow30dMinor);
   const formatted = formatAmount(data.netWorthMinor, data.baseCurrency);

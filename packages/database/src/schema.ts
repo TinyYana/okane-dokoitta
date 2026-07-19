@@ -360,7 +360,7 @@ export const journalEntries = okane.table(
     // 交易被修改時舊 entry 軟刪除、產生新 entry（不物理刪除帳務資料）
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (t) => [index('journal_entries_txn_idx').on(t.transactionId)],
+  (t) => [index('journal_entries_txn_idx').on(t.transactionId), index('journal_entries_user_idx').on(t.userId)],
 );
 
 export const journalLines = okane.table(

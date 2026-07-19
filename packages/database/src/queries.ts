@@ -63,14 +63,17 @@ export async function accountBalances(db: Db, userId: string): Promise<Map<strin
   return new Map(rows.map((r) => [r.accountId, BigInt(r.balance)]));
 }
 
-export async function listAccounts(db: Db, userId: string) {
-  const rows = await db
+async function accountRowsRaw(db: Db, userId: string) {
+  return db
     .select({ account: accounts, creditCard: creditCards })
     .from(accounts)
     .leftJoin(creditCards, eq(creditCards.accountId, accounts.id))
     .where(and(eq(accounts.userId, userId), isNull(accounts.deletedAt)))
     .orderBy(accounts.createdAt);
-  const balances = await accountBalances(db, userId);
+}
+
+export async function listAccounts(db: Db, userId: string) {
+  const [rows, balances] = await Promise.all([accountRowsRaw(db, userId), accountBalances(db, userId)]);
   return rows.map((r) => ({
     ...r.account,
     balanceMinor: balances.get(r.account.id) ?? 0n,
@@ -165,8 +168,16 @@ async function cardPeriodSums(
   return { postedMinor, pendingMinor, refundedMinor };
 }
 
-/** 信用卡週期視圖（ACCT-5）：全部由 transactions + journal 推導，不是儲存欄位。 */
-export async function cardCycleView(db: Db, userId: string, cardAccountId: string, today: CivilDate) {
+/** 信用卡週期視圖（ACCT-5）：全部由 transactions + journal 推導，不是儲存欄位。
+ * precomputedBalances：呼叫端已算過全帳戶餘額時傳入，省一次全帳本聚合（見 netWorthSummary）。
+ */
+export async function cardCycleView(
+  db: Db,
+  userId: string,
+  cardAccountId: string,
+  today: CivilDate,
+  precomputedBalances?: Map<string, bigint>,
+) {
   const [row] = await db
     .select({ account: accounts, card: creditCards })
     .from(accounts)
@@ -179,31 +190,33 @@ export async function cardCycleView(db: Db, userId: string, cardAccountId: strin
   const current = computeCardCycle(card.statementDay, card.dueDay, today);
   const previous = computePreviousCardCycle(card.statementDay, card.dueDay, today);
 
-  const currentSums = await cardPeriodSums(db, userId, cardAccountId, current.periodStart, current.periodEnd);
-  const prevSums = await cardPeriodSums(db, userId, cardAccountId, previous.periodStart, previous.periodEnd);
-
   // 上期已繳：結帳日之後付進這張卡的 card_payment 合計
   // ponytail: 繳款不分期別歸屬（單卡單期的簡化）；M3 statements 落地後改按 payment_for_statement link 歸屬
-  const [paidRow] = await db
-    .select({ total: sql<string>`coalesce(sum(${transactions.amountMinor}), 0)::text` })
-    .from(transactions)
-    .innerJoin(journalEntries, eq(journalEntries.transactionId, transactions.id))
-    .where(
-      and(
-        eq(transactions.userId, userId),
-        isNull(transactions.deletedAt),
-        isNull(journalEntries.deletedAt),
-        eq(transactions.type, 'card_payment'),
-        eq(transactions.toAccountId, cardAccountId),
-        sql`${journalEntries.entryDate} > ${formatCivilDate(previous.statementDate)}`,
-      ),
-    );
+  const [currentSums, prevSums, paidRow, balances] = await Promise.all([
+    cardPeriodSums(db, userId, cardAccountId, current.periodStart, current.periodEnd),
+    cardPeriodSums(db, userId, cardAccountId, previous.periodStart, previous.periodEnd),
+    db
+      .select({ total: sql<string>`coalesce(sum(${transactions.amountMinor}), 0)::text` })
+      .from(transactions)
+      .innerJoin(journalEntries, eq(journalEntries.transactionId, transactions.id))
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          isNull(transactions.deletedAt),
+          isNull(journalEntries.deletedAt),
+          eq(transactions.type, 'card_payment'),
+          eq(transactions.toAccountId, cardAccountId),
+          sql`${journalEntries.entryDate} > ${formatCivilDate(previous.statementDate)}`,
+        ),
+      )
+      .then(([r]) => r),
+    precomputedBalances ?? accountBalances(db, userId),
+  ]);
   const paidMinor = BigInt(paidRow?.total ?? '0');
   const prevTotal = prevSums.postedMinor + prevSums.pendingMinor - prevSums.refundedMinor;
   const unpaid = prevTotal - paidMinor;
 
   // 卡目前總負債 = −(lines 加總)（負債貸方為負）
-  const balances = await accountBalances(db, userId);
   const outstanding = -(balances.get(cardAccountId) ?? 0n);
 
   // 可用額度：共用群組 → 群組上限 − 群組內所有卡負債；獨立 → 卡上限 − 卡負債
@@ -394,6 +407,7 @@ async function upcomingOutflow30d(
   today: CivilDate,
   accountRows: Array<{ id: string; subtype: string }>,
   toBase: (amountMinor: bigint, currency: string) => Promise<bigint>,
+  balances: Map<string, bigint>,
 ): Promise<bigint> {
   const todayStr = formatCivilDate(today);
   const horizon = formatCivilDate(addDays(today, 30));
@@ -417,8 +431,8 @@ async function upcomingOutflow30d(
   }
 
   const cards = accountRows.filter((a) => a.subtype === 'credit_card');
-  for (const card of cards) {
-    const view = await cardCycleView(db, userId, card.id, today);
+  const views = await Promise.all(cards.map((card) => cardCycleView(db, userId, card.id, today, balances)));
+  for (const view of views) {
     if (!view) continue;
     if (view.previous.unpaidMinor > 0n && view.previous.dueDate <= horizon) {
       total += await toBase(view.previous.unpaidMinor, view.currency);
@@ -453,7 +467,12 @@ export interface NetWorthResult {
 
 /** 首頁淨資產一覽（INV-5）：資產＋持倉市值－負債，換算到使用者基準幣別。 */
 export async function netWorthSummary(db: Db, userId: string, baseCurrency: string, today: CivilDate): Promise<NetWorthResult> {
-  const accountRows = await listAccounts(db, userId);
+  const [rawRows, balances] = await Promise.all([accountRowsRaw(db, userId), accountBalances(db, userId)]);
+  const accountRows = rawRows.map((r) => ({
+    ...r.account,
+    balanceMinor: balances.get(r.account.id) ?? 0n,
+    creditCard: r.creditCard,
+  }));
   const rateCache = new Map<string, { rate: string; asOf: Date } | null>();
   let incomplete = false;
   let oldestDataAsOf: Date | null = null;
@@ -514,7 +533,7 @@ export async function netWorthSummary(db: Db, userId: string, baseCurrency: stri
     });
   }
 
-  const upcomingOutflow30dMinor = await upcomingOutflow30d(db, userId, today, accountRows, toBase);
+  const upcomingOutflow30dMinor = await upcomingOutflow30d(db, userId, today, accountRows, toBase, balances);
 
   return {
     baseCurrency,

@@ -1,0 +1,1 @@
+CREATE INDEX "journal_entries_user_idx" ON "okane_dokoitta"."journal_entries" USING btree ("user_id");

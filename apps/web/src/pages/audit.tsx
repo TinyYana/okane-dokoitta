@@ -109,6 +109,7 @@ function AuditHome() {
   const aiAvailability = useAiAvailability();
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSourceText, setAiSourceText] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   // AI 欄位抽取（M6）：髒文字 → 逐行格式，結果貼回輸入框給使用者過目，走同一條匯入管線
   async function aiTidy() {
@@ -144,6 +145,23 @@ function AuditHome() {
     if (!file) return;
     if (file.size > 5_000_000) return toast('檔案超過 5 MB 上限', 'error');
     setFilename(file.name);
+    if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+      setPdfBusy(true);
+      try {
+        const { extractPdfText } = await import('../pdf-extract.js');
+        const extracted = await extractPdfText(file);
+        if (!extracted) return toast('這份 PDF 抽不出文字，可能是掃描圖檔；請改用 CSV 或手動輸入', 'error');
+        setKind('text');
+        setText(extracted);
+        setAiSourceText(null);
+        toast('已在瀏覽器內抽出 PDF 文字層；排版常會被拆亂，建議接著按「AI 幫我整理成逐行格式」', 'ok');
+      } catch (error) {
+        toast(messageOf(error, 'PDF 文字抽取失敗'), 'error');
+      } finally {
+        setPdfBusy(false);
+      }
+      return;
+    }
     setKind(file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'text');
     setText(await file.text());
     setAiSourceText(null);
@@ -215,8 +233,15 @@ function AuditHome() {
               {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}{account.creditCard?.last4 ? ` • ${account.creditCard.last4}` : ''}</option>)}
             </select>
           </Field>
-          <Field label="CSV 或文字檔">
-            <input className="block w-full text-sm" type="file" accept=".csv,.txt,text/csv,text/plain" onChange={(event) => void readFile(event.target.files?.[0])} />
+          <Field label="CSV、文字檔或 PDF">
+            <input
+              className="block w-full text-sm"
+              type="file"
+              accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf"
+              disabled={pdfBusy}
+              onChange={(event) => void readFile(event.target.files?.[0])}
+            />
+            {pdfBusy ? <p className="mt-1 text-xs text-[var(--odk-muted)]">正在抽取 PDF 文字層…</p> : null}
           </Field>
           <Field label="帳單期間開始（銀行格式可自動帶入）"><TextInput type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} /></Field>
           <Field label="帳單期間結束（銀行格式可自動帶入）"><TextInput type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
@@ -257,7 +282,7 @@ function AuditHome() {
           ) : null}
         </div>
         <AiAvailabilityHint availability={aiAvailability} />
-        <p className="text-xs leading-5 text-[var(--odk-muted)]">聯邦銀行 CSV 會依末四碼自動拆成每張卡的審計，銀行合併應繳總額仍保留在同一帳單群組；請先在卡片設定填好末四碼<br />通用 CSV／文字格式請手動補齊帳單資料；PDF 目前只讀文字層</p>
+        <p className="text-xs leading-5 text-[var(--odk-muted)]">聯邦銀行 CSV 會依末四碼自動拆成每張卡的審計，銀行合併應繳總額仍保留在同一帳單群組；請先在卡片設定填好末四碼<br />通用 CSV／文字格式請手動補齊帳單資料；PDF 會在瀏覽器內抽出文字層（不上傳原始檔），排版較亂的帳單建議接著按 AI 整理，掃描圖檔（沒有文字層）無法抽取</p>
       </section>
 
       <section className="space-y-3">

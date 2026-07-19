@@ -33,6 +33,8 @@ export default defineConfig({
       injectManifest: {
         // M1 線上版：只快取靜態資源；API 不快取（離線鏡像是 M2 的 IndexedDB）
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        // PDF 匯入是選用功能，pdf.js 本體很大（~1.7MB）；只在使用者真的選 PDF 時動態載入，不預先塞進安裝快取
+        globIgnores: ['**/pdf-extract-*.js', '**/pdf.worker*.mjs'],
       },
     }),
   ],

@@ -34,6 +34,7 @@ import type { AuthContext } from './auth.js';
 import type { ApiEnv } from './env.js';
 import { removeStoredImport, storeEncryptedImport } from './file-store.js';
 import { suggestCategoryFromHistory } from './category-suggestion.js';
+import { categorizeByKeyword } from './category-keywords.js';
 
 type Variables = { auth: AuthContext };
 
@@ -323,9 +324,18 @@ async function runMatching(
         ? '信用卡回饋'
         : transactionType === 'fee' ? '海外交易手續費' : DEFAULT_EXPENSE_CATEGORIES.at(-1)!;
       const suggested = transactionType === 'expense' ? suggestCategoryFromHistory(history, item.merchantRaw, 'expense') : null;
-      const category = suggested
+      const historyCategory = suggested
         ? activeCategories.find((account) => account.id === suggested.categoryAccountId && account.subtype === categorySubtype)
-        : activeCategories.find((account) => account.name === categoryName && account.subtype === categorySubtype);
+        : undefined;
+      // 沒有使用者歷史時，先試關鍵字規則（SUB/Steam 之類）；規則對應的分類被使用者刪掉／改名時退回通用 fallback
+      const keywordCategoryName = !historyCategory && transactionType === 'expense' ? categorizeByKeyword(item.merchantRaw) : null;
+      const keywordCategory = keywordCategoryName
+        ? activeCategories.find((account) => account.name === keywordCategoryName && account.subtype === categorySubtype)
+        : undefined;
+      const fallbackCategory = !historyCategory && !keywordCategory
+        ? activeCategories.find((account) => account.name === categoryName && account.subtype === categorySubtype)
+        : undefined;
+      const category = historyCategory ?? keywordCategory ?? fallbackCategory;
       candidates.push({
         id: candidateId, statementItemId: item.id, kind: 'missing_in_ledger', score: '0.0000', reasoningCodes: [],
         evidence: { amountMinor: item.amountMinor.toString(), merchantRaw: item.merchantRaw },
@@ -338,8 +348,8 @@ async function runMatching(
           payload: {
             transactionId: newId(), mutationId: newId(), statementId, statementItemId: item.id,
             transactionType, categoryAccountId: category?.id ?? null,
-            categorySource: suggested && category ? 'history' : category && transactionType !== 'expense' ? 'special' : category ? 'fallback' : 'missing',
-            needsReview: transactionType === 'expense' && !(suggested && category),
+            categorySource: historyCategory ? 'history' : keywordCategory ? 'keyword' : category && transactionType !== 'expense' ? 'special' : category ? 'fallback' : 'missing',
+            needsReview: transactionType === 'expense' && !historyCategory,
           },
         } : unresolvedPatch(candidateId, 'missing_in_ledger', { statementItemId: item.id }),
       });
