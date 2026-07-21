@@ -1,0 +1,33 @@
+{
+  "importerId": "cathay-credit-card",
+  "institution": "國泰世華銀行",
+  "periodStart": "2025-12-28",
+  "periodEnd": "2026-01-10",
+  "statementDate": "2026-01-10",
+  "dueDate": "2026-01-28",
+  "totalMinor": "900",
+  "currency": "TWD",
+  "cardLast4": "9999",
+  "transactions": [
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "跨年測試商店",
+      "amountMinor": "400",
+      "currency": "TWD",
+      "type": "purchase",
+      "occurredAt": "2025-12-28",
+      "postedAt": "2025-12-30",
+      "cardLast4": "9999"
+    },
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "測試超商－丙店",
+      "amountMinor": "500",
+      "currency": "TWD",
+      "type": "purchase",
+      "occurredAt": "2026-01-05",
+      "postedAt": "2026-01-07",
+      "cardLast4": "9999"
+    }
+  ]
+}

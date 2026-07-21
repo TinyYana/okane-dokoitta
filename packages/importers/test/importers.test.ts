@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   blockedImporters,
+  cathayCreditCardImporter,
   genericCsvImporter,
   genericTextImporter,
   IMPORT_LIMITS,
@@ -11,8 +12,19 @@ import {
   unionBankCreditCardImporter,
 } from '../src/index.js';
 
-function fixture(importer: 'generic-csv' | 'generic-text' | 'union-bank-credit-card', name: string): string {
+function fixture(importer: 'cathay-credit-card' | 'generic-csv' | 'generic-text' | 'union-bank-credit-card', name: string): string {
   return readFileSync(new URL(`../fixtures/${importer}/${name}`, import.meta.url), 'utf8');
+}
+
+function normalizedCathay(result: Awaited<ReturnType<typeof cathayCreditCardImporter.parse>>) {
+  return {
+    ...result.statement,
+    totalMinor: result.statement.totalMinor?.toString(),
+    transactions: result.statement.transactions.map(({ metadata: _metadata, ...transaction }) => ({
+      ...transaction,
+      amountMinor: transaction.amountMinor.toString(),
+    })),
+  };
 }
 
 function normalizedUnion(result: Awaited<ReturnType<typeof unionBankCreditCardImporter.parse>>) {
@@ -82,6 +94,31 @@ describe('union-bank-credit-card', () => {
   });
 });
 
+describe('cathay-credit-card', () => {
+  it.each(['normal', 'year-boundary'])('matches the %s fixture', async (name) => {
+    const text = fixture('cathay-credit-card', `${name}.txt`);
+    const result = await cathayCreditCardImporter.parse({ kind: 'text', text });
+    expect(normalizedCathay(result)).toEqual(JSON.parse(fixture('cathay-credit-card', `${name}.expected.json`)));
+    expect(detectImporters({ kind: 'text', text })[0]?.importer.id).toBe('cathay-credit-card');
+  });
+
+  it('warns when transaction total does not match 本期應繳總額（含前期已繳）', async () => {
+    const result = await cathayCreditCardImporter.parse({ kind: 'text', text: fixture('cathay-credit-card', 'normal.txt') });
+    expect(result.warnings).toEqual([{ code: 'FIELD_IGNORED', line: 0, message: '交易加總與本期應繳總額不一致，可能含前期未繳或付款調整，請人工確認' }]);
+  });
+
+  it('不會把頁碼／頁尾裝訂碼（例如「01/01 2/3」）誤湊成假交易——曾在真實帳單重現過的迴歸案例', async () => {
+    const text = fixture('cathay-credit-card', 'normal.txt');
+    const result = await cathayCreditCardImporter.parse({ kind: 'text', text });
+    expect(result.statement.transactions).toHaveLength(5);
+    expect(result.statement.transactions.some((transaction) => transaction.amountMinor > 100_000n)).toBe(false);
+  });
+
+  it('detect() 不認一般文字為國泰帳單', () => {
+    expect(detectImporters({ kind: 'text', text: '2026-07-01|全家|100|TWD|消費' }).find((d) => d.importer.id === 'cathay-credit-card')).toBeUndefined();
+  });
+});
+
 describe('security and capability boundaries', () => {
   it('protects formula-like fields when exporting CSV', () => {
     expect(protectSpreadsheetFormula('=2+2')).toBe("'=2+2");
@@ -99,8 +136,9 @@ describe('security and capability boundaries', () => {
   });
 
   it('does not register unsupported source-specific importers', () => {
-    expect(blockedImporters.map(({ id }) => id)).toEqual(['moze-export', 'cathay-credit-card', 'line-bank']);
+    expect(blockedImporters.map(({ id }) => id)).toEqual(['moze-export', 'line-bank']);
     for (const { id } of blockedImporters) expect(importerById(id)).toBeUndefined();
     expect(importerById('union-bank-credit-card')).toBe(unionBankCreditCardImporter);
+    expect(importerById('cathay-credit-card')).toBe(cathayCreditCardImporter);
   });
 });

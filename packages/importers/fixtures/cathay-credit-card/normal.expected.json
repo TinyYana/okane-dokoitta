@@ -1,0 +1,62 @@
+{
+  "importerId": "cathay-credit-card",
+  "institution": "國泰世華銀行",
+  "periodStart": "2026-02-10",
+  "periodEnd": "2026-03-23",
+  "statementDate": "2026-03-23",
+  "dueDate": "2026-04-08",
+  "totalMinor": "2500",
+  "currency": "TWD",
+  "cardLast4": "1234",
+  "transactions": [
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "他行ＡＴＭ轉帳繳款",
+      "amountMinor": "-500",
+      "currency": "TWD",
+      "type": "payment",
+      "occurredAt": "2026-02-13",
+      "postedAt": "2026-02-15"
+    },
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "測試超商－甲店",
+      "amountMinor": "100",
+      "currency": "TWD",
+      "type": "purchase",
+      "occurredAt": "2026-02-10",
+      "postedAt": "2026-02-12",
+      "cardLast4": "1234"
+    },
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "測試超商－乙店",
+      "amountMinor": "200",
+      "currency": "TWD",
+      "type": "purchase",
+      "occurredAt": "2026-02-11",
+      "postedAt": "2026-02-13",
+      "cardLast4": "1234"
+    },
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "點數折抵＿測試超商－乙店",
+      "amountMinor": "-50",
+      "currency": "TWD",
+      "type": "refund",
+      "occurredAt": "2026-02-12",
+      "postedAt": "2026-02-14",
+      "cardLast4": "1234"
+    },
+    {
+      "institution": "國泰世華銀行",
+      "merchantRaw": "連支＊測試網路商店",
+      "amountMinor": "2250",
+      "currency": "TWD",
+      "type": "purchase",
+      "occurredAt": "2026-02-20",
+      "postedAt": "2026-02-22",
+      "cardLast4": "1234"
+    }
+  ]
+}

@@ -296,7 +296,7 @@ function AuditHome() {
           ) : null}
         </div>
         <AiAvailabilityHint availability={aiAvailability} />
-        <p className="text-xs leading-5 text-[var(--odk-muted)]">聯邦銀行 CSV 會依末四碼自動拆成每張卡的審計，銀行合併應繳總額仍保留在同一帳單群組；請先在卡片設定填好末四碼<br />通用 CSV／文字格式請手動補齊帳單資料；PDF 會在瀏覽器內抽出文字層（不上傳原始檔），排版較亂的帳單建議接著按 AI 整理，掃描圖檔（沒有文字層）無法抽取</p>
+        <p className="text-xs leading-5 text-[var(--odk-muted)]">聯邦銀行 CSV 會依末四碼自動拆成每張卡的審計，銀行合併應繳總額仍保留在同一帳單群組；請先在卡片設定填好末四碼<br />國泰世華電子帳單（PDF 抽出的文字）會自動認出帳單日、繳款截止日與應繳總額，不用手動補<br />其他通用 CSV／文字格式請手動補齊帳單資料；PDF 會在瀏覽器內抽出文字層（不上傳原始檔），排版較亂的帳單建議接著按 AI 整理，掃描圖檔（沒有文字層）無法抽取</p>
       </section>
 
       <section className="space-y-3">
