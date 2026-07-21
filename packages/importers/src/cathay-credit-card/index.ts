@@ -65,7 +65,7 @@ export const cathayCreditCardImporter: Importer = {
     let earliest: CivilDate | undefined;
 
     for (const match of text.matchAll(ROW_RE)) {
-      const [, occMonth, occDay, postMonth, postDay, merchantRaw, amountText, last4, , country, currency] = match;
+      const [, occMonth, occDay, postMonth, postDay, merchantRaw, amountText, last4, , , currency] = match;
       const merchant = merchantRaw!.trim();
       if (!merchant) continue;
       try {
