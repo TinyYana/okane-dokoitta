@@ -503,6 +503,52 @@ async function writeHolding(
   }
 }
 
+/**
+ * 重放某資產帳戶＋標的目前所有有效的 invest_buy/invest_sell/adjustment，依發生時間重建 holdings。
+ * update/delete 不會逐筆反向調整 holdings（那樣在刪除較早的買入時容易算出負持倉)，
+ * 而是刪除/改金額後直接重算一次，用真實剩餘交易得出唯一正確的持倉——
+ * 若剩餘交易本身量不足（例如刪掉的買入已被後面的賣出用掉），重放會丟 HOLDING_INSUFFICIENT，
+ * 交由呼叫端的 DB transaction 整筆回滾，不會留下負持倉。
+ * 回傳每筆 invest_sell 重放當下的成本基礎，供呼叫端重建該筆賣出的分錄用。
+ */
+async function recomputeHolding(
+  tx: Db,
+  userId: string,
+  assetAccountId: string,
+  securityId: string,
+  mutationId: string | null,
+): Promise<Map<string, bigint>> {
+  const rows = await tx
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.securityId, securityId),
+        isNull(transactions.deletedAt),
+        or(eq(transactions.fromAccountId, assetAccountId), eq(transactions.toAccountId, assetAccountId)),
+      ),
+    )
+    .orderBy(transactions.occurredAt, transactions.createdAt);
+
+  let state: HoldingState | undefined;
+  const costBasisByTransactionId = new Map<string, bigint>();
+  for (const row of rows) {
+    if (row.quantityMicro === null) continue;
+    if (row.type === 'invest_buy' || row.type === 'adjustment') {
+      state = applyBuy(state, row.quantityMicro, row.amountMinor);
+    } else if (row.type === 'invest_sell') {
+      const { next, costBasisMinor } = applySell(state, row.quantityMicro);
+      state = next;
+      costBasisByTransactionId.set(row.id, costBasisMinor);
+    }
+  }
+
+  const current = await loadHolding(tx, assetAccountId, securityId);
+  await writeHolding(tx, userId, assetAccountId, securityId, current, state ?? { quantityMicro: 0n, costBasisMinor: 0n }, mutationId);
+  return costBasisByTransactionId;
+}
+
 /** 交易寫入核心：domain 驗證 → transactions + journal entry/lines + links + audit。 */
 async function insertTransactionWithEntry(
   tx: Db,
@@ -1075,6 +1121,9 @@ async function updateTransaction(tx: Db, user: MutationUser, m: MutationInput): 
     next.categoryAccountId !== current.categoryAccountId ||
     next.occurredAt.getTime() !== current.occurredAt.getTime();
 
+  // transactions 先落地，holdings 重放與分錄重建都要讀到新金額
+  await tx.update(transactions).set(next).where(eq(transactions.id, current.id));
+
   if (financialChanged) {
     // refund 重建分錄時取回既有 link 的原交易（link 本身不重建）
     let originalTransactionId: string | undefined;
@@ -1087,6 +1136,17 @@ async function updateTransaction(tx: Db, user: MutationUser, m: MutationInput): 
       if (!link) throw invalid('REFUND_MISSING_LINK', '退款交易缺少原交易連結');
       originalTransactionId = link.fromTransactionId;
     }
+
+    // 投資買賣/期初持倉改金額：holdings 是累加值，金額改了要重放，賣出的成本基礎也要一併從重放結果取回
+    // （不能沿用當下 amountMinor，賣出成本基礎跟成交金額無關，見 posting.ts invest_sell）
+    let costBasisMinor: bigint | undefined;
+    if (current.securityId && (current.type === 'invest_buy' || current.type === 'invest_sell' || current.type === 'adjustment')) {
+      const assetAccountId = current.type === 'invest_sell' ? next.fromAccountId : next.toAccountId;
+      if (!assetAccountId) throw invalid('ACCOUNT_NOT_FOUND', '投資資產帳戶不存在');
+      const costBasisByTransactionId = await recomputeHolding(tx, user.id, assetAccountId, current.securityId, m.mutationId);
+      if (current.type === 'invest_sell') costBasisMinor = costBasisByTransactionId.get(current.id);
+    }
+
     const input: TransactionInput = {
       id: current.id,
       type: current.type,
@@ -1097,6 +1157,7 @@ async function updateTransaction(tx: Db, user: MutationUser, m: MutationInput): 
       toAccountId: next.toAccountId ?? undefined,
       categoryAccountId: next.categoryAccountId ?? undefined,
       originalTransactionId,
+      costBasisMinor,
       merchantRaw: next.merchantRaw ?? undefined,
       note: next.note ?? undefined,
       occurredAt: next.occurredAt.toISOString(),
@@ -1132,7 +1193,6 @@ async function updateTransaction(tx: Db, user: MutationUser, m: MutationInput): 
     );
   }
 
-  await tx.update(transactions).set(next).where(eq(transactions.id, current.id));
   await audit(tx, user.id, 'transactions', m.entityId, 'update', current, { ...current, ...next }, m.mutationId);
   return { mutationId: m.mutationId, result: 'applied', version: next.version };
 }
@@ -1153,6 +1213,14 @@ async function deleteTransaction(tx: Db, user: MutationUser, m: MutationInput): 
     .update(journalEntries)
     .set({ deletedAt: now })
     .where(and(eq(journalEntries.transactionId, current.id), isNull(journalEntries.deletedAt)));
+
+  // 投資買賣/期初持倉刪除：holdings 是累加值，不重放會留下刪不掉的「幽靈股數」，
+  // 之後還能拿去再賣一次、無中生有多出交割現金——這正是本次要修的 bug。
+  if (current.securityId && (current.type === 'invest_buy' || current.type === 'invest_sell' || current.type === 'adjustment')) {
+    const assetAccountId = current.type === 'invest_sell' ? current.fromAccountId : current.toAccountId;
+    if (assetAccountId) await recomputeHolding(tx, user.id, assetAccountId, current.securityId, m.mutationId);
+  }
+
   await audit(tx, user.id, 'transactions', m.entityId, 'delete', current, { ...current, ...next }, m.mutationId);
   return { mutationId: m.mutationId, result: 'applied', version: next.version };
 }

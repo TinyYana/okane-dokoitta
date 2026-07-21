@@ -1,6 +1,6 @@
 import { rm } from 'node:fs/promises';
 import { schema, type Db } from '@okane-dokoitta/database';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { v7 as uuidv7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -220,5 +220,134 @@ describe('M4 投資帳戶、持倉平均成本法、淨資產一覽', () => {
 
     const completeNetWorth = (await (await client.get('/api/net-worth')).json()) as { incomplete: boolean; cashMinor: string };
     expect(completeNetWorth.incomplete).toBe(false);
+  });
+});
+
+describe('M4 迴歸：holdings 在刪除/編輯 invest_buy/invest_sell 後必須重放，不能留下幽靈股數', () => {
+  let invId = '';
+  let settleId = '';
+  let assetId = '';
+  let secId = '';
+
+  async function settlementBalance(): Promise<bigint> {
+    const accounts = (await (await client.get('/api/accounts')).json()) as { accounts: Array<{ id: string; balanceMinor: string }> };
+    return BigInt(accounts.accounts.find((a) => a.id === settleId)!.balanceMinor);
+  }
+
+  async function holding(): Promise<{ quantity: string; costBasisMinor: string } | undefined> {
+    const investments = (await (await client.get('/api/investments')).json()) as {
+      holdings: Array<{ securityId: string; quantity: string; costBasisMinor: string }>;
+    };
+    return investments.holdings.find((h) => h.securityId === secId);
+  }
+
+  async function version(entityId: string): Promise<number> {
+    const txns = (await (await client.get('/api/transactions?limit=200')).json()) as { transactions: Array<{ id: string; version: number }> };
+    return txns.transactions.find((t) => t.id === entityId)!.version;
+  }
+
+  beforeAll(async () => {
+    invId = uuidv7();
+    await client.post('/api/mutations', mutation('investment_accounts', 'create', invId, { name: '迴歸測試證券', currency: 'TWD' }));
+    const investments = (await (await client.get('/api/investments')).json()) as {
+      investmentAccounts: Array<{ id: string; settlementAccountId: string; assetAccountId: string }>;
+    };
+    const inv = investments.investmentAccounts.find((i) => i.id === invId)!;
+    settleId = inv.settlementAccountId;
+    assetId = inv.assetAccountId;
+    secId = uuidv7();
+    await client.post('/api/mutations', mutation('securities', 'create', secId, {
+      symbol: 'REG', name: '迴歸測試標的', market: 'TW', currency: 'TWD', kind: 'stock',
+    }));
+  });
+
+  it('刪除賣出交易：holdings 與交割現金都要回復到賣出前，不能留在「已賣出」狀態', async () => {
+    await client.post('/api/mutations', mutation('transactions', 'create', uuidv7(), {
+      type: 'invest_buy', amountMinor: '10000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '100',
+      occurredAt: '2026-06-01T02:00:00.000Z', source: 'manual',
+    }));
+    const settleBeforeSell = await settlementBalance();
+
+    const sellId = uuidv7();
+    await client.post('/api/mutations', mutation('transactions', 'create', sellId, {
+      type: 'invest_sell', amountMinor: '5000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '40', categoryAccountId: incomeCategoryId,
+      occurredAt: '2026-06-02T02:00:00.000Z', source: 'manual',
+    }));
+    expect((await holding())?.quantity).toBe('60');
+    expect((await holding())?.costBasisMinor).toBe('6000');
+    expect(await settlementBalance()).toBe(settleBeforeSell + 5000n);
+
+    const del = await client.post('/api/mutations', mutation('transactions', 'delete', sellId, {}, await version(sellId)));
+    expect(del.status).toBe(200);
+
+    // 刪除賣出後：40 股與其成本要還原回持倉，交割現金要吐回賣出的 5000
+    expect((await holding())?.quantity).toBe('100');
+    expect((await holding())?.costBasisMinor).toBe('10000');
+    expect(await settlementBalance()).toBe(settleBeforeSell);
+
+    // 拿「還原後」的持倉重賣一次：交割現金只能照這次實際賣出的金額增加，不能疊加刪除前那筆
+    const settleBeforeResell = await settlementBalance();
+    const resell = await client.post('/api/mutations', mutation('transactions', 'create', uuidv7(), {
+      type: 'invest_sell', amountMinor: '12000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '100', categoryAccountId: incomeCategoryId,
+      occurredAt: '2026-06-03T02:00:00.000Z', source: 'manual',
+    }));
+    expect(resell.status).toBe(200);
+    expect(await settlementBalance()).toBe(settleBeforeResell + 12000n);
+    expect((await holding())?.quantity).toBe('0');
+  });
+
+  it('刪除已被後續賣出用掉的買入 → 拒絕（不能無中生有留下幽靈股數）', async () => {
+    const buyId = uuidv7();
+    await client.post('/api/mutations', mutation('transactions', 'create', buyId, {
+      type: 'invest_buy', amountMinor: '6000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '50',
+      occurredAt: '2026-06-10T02:00:00.000Z', source: 'manual',
+    }));
+    await client.post('/api/mutations', mutation('transactions', 'create', uuidv7(), {
+      type: 'invest_sell', amountMinor: '7000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '50', categoryAccountId: incomeCategoryId,
+      occurredAt: '2026-06-11T02:00:00.000Z', source: 'manual',
+    }));
+    expect((await holding())?.quantity).toBe('0');
+
+    const settleBefore = await settlementBalance();
+    const del = await client.post('/api/mutations', mutation('transactions', 'delete', buyId, {}, await version(buyId)));
+    expect(del.status).toBe(422);
+    expect(await del.json()).toMatchObject({ error: { code: 'HOLDING_INSUFFICIENT' } });
+    // 拒絕的刪除不能留下部分寫入：交割現金與持倉都要維持原樣
+    expect(await settlementBalance()).toBe(settleBefore);
+    expect((await holding())?.quantity).toBe('0');
+  });
+
+  it('編輯賣出金額：成本基礎與已實現損益要保留，不能被新金額覆蓋成 0', async () => {
+    await client.post('/api/mutations', mutation('transactions', 'create', uuidv7(), {
+      type: 'invest_buy', amountMinor: '3000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '30',
+      occurredAt: '2026-06-20T02:00:00.000Z', source: 'manual',
+    }));
+    const sellId = uuidv7();
+    await client.post('/api/mutations', mutation('transactions', 'create', sellId, {
+      type: 'invest_sell', amountMinor: '4000', currency: 'TWD',
+      investmentAccountId: invId, securityId: secId, quantity: '30', categoryAccountId: incomeCategoryId,
+      occurredAt: '2026-06-21T02:00:00.000Z', source: 'manual',
+    }));
+    const settleBeforeEdit = await settlementBalance();
+
+    // 訂正成交金額 4000 → 4500（賣出股數不變，成本基礎理應照舊是 3000）
+    const edit = await client.post('/api/mutations', mutation('transactions', 'update', sellId, { amountMinor: '4500' }, await version(sellId)));
+    expect(edit.status).toBe(200);
+    expect(await settlementBalance()).toBe(settleBeforeEdit + 500n);
+
+    const [entry] = await db
+      .select({ id: schema.journalEntries.id })
+      .from(schema.journalEntries)
+      .where(and(eq(schema.journalEntries.transactionId, sellId), isNull(schema.journalEntries.deletedAt)));
+    const lines = await db.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, entry!.id));
+    const assetLine = lines.find((l) => l.accountId === assetId);
+    // 成本基礎沒被新金額覆蓋：投資資產帳戶這筆線仍是 -3000（原成本），不是 -4500
+    expect(assetLine?.amountMinor.toString()).toBe('-3000');
   });
 });
