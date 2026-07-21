@@ -111,16 +111,30 @@ function AuditHome() {
   const [aiSourceText, setAiSourceText] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
 
-  // AI 欄位抽取（M6）：髒文字 → 逐行格式，結果貼回輸入框給使用者過目，走同一條匯入管線
+  // AI 欄位抽取（M6）：髒文字 → 逐行格式，結果貼回輸入框給使用者過目，走同一條匯入管線；
+  // 順便帶出帳單日／繳款日／總額／期間——只補使用者還沒填的欄位，不覆蓋手動輸入的值，送出前仍可再改
   async function aiTidy() {
     setAiBusy(true);
     try {
-      const result = await api.post<{ text: string }>('/api/ai/extract-statement', { text });
+      const result = await api.post<{
+        text: string;
+        statementDate: string | null;
+        dueDate: string | null;
+        periodStart: string | null;
+        periodEnd: string | null;
+        total: string | null;
+      }>('/api/ai/extract-statement', { text });
       if (!result.text) return toast('AI 沒抓到可用的交易行', 'error');
       setAiSourceText((current) => current ?? text);
       setText(result.text);
       setKind('text');
-      toast('AI 整理稿已產生——原文會另外保留，請確認後再開始審計', 'ok');
+      if (result.statementDate && !statementDate) setStatementDate(result.statementDate);
+      if (result.dueDate && !dueDate) setDueDate(result.dueDate);
+      if (result.periodStart && !periodStart) setPeriodStart(result.periodStart);
+      if (result.periodEnd && !periodEnd) setPeriodEnd(result.periodEnd);
+      if (result.total && !total) setTotal(result.total);
+      const filledCount = [result.statementDate, result.dueDate, result.total].filter(Boolean).length;
+      toast(`AI 整理稿已產生${filledCount ? `，順便帶入 ${filledCount} 項帳單資料` : ''}——原文會另外保留，請確認後再開始審計`, 'ok');
     } catch (error) {
       toast(messageOf(error, 'AI 整理失敗'), 'error');
     } finally {

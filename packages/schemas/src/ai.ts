@@ -18,6 +18,18 @@ export const zAiExtractRequest = z.object({
   text: z.string().min(1).max(20_000),
 });
 
+const zAiExtractDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
+
+/** AI provider 的不可信輸出；API 驗證後只用來預填匯入表單欄位，使用者送出前仍可修改。 */
+export const zAiExtractOutput = z.object({
+  lines: z.string().max(20_000),
+  statementDate: zAiExtractDate.optional().default(null),
+  dueDate: zAiExtractDate.optional().default(null),
+  periodStart: zAiExtractDate.optional().default(null),
+  periodEnd: zAiExtractDate.optional().default(null),
+  total: z.string().regex(/^\d+(\.\d+)?$/).nullable().optional().default(null),
+});
+
 export const zAiNormalizeMerchantRequest = z.object({
   /** 原始商家字串（刷卡單上的縮寫、分店代碼等） */
   merchants: z.array(z.string().min(1).max(200)).min(1).max(50),

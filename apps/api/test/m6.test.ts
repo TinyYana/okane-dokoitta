@@ -150,12 +150,20 @@ describe('M6 AI 輔助層（BYOK、AI-1~4）', () => {
     expect((await client.post('/api/ai/settings', {
       enabled: true, baseUrl: 'https://ai.example.com/v1', model: 'test-model', apiKey: 'sk-test-key',
     })).status).toBe(200);
-    mockUpstream(CLEANED_LINES);
+    mockUpstream(JSON.stringify({
+      lines: CLEANED_LINES,
+      statementDate: '2026-07-31', dueDate: '2026-08-10', periodStart: '2026-07-01', periodEnd: '2026-07-31', total: '510',
+    }));
     const sourceText = '2026/7/2 全家便利商 店ABC123 NT$120\n07-03 NETFLIX.COM 390元';
     const extract = await client.post('/api/ai/extract-statement', { text: sourceText });
     expect(extract.status).toBe(200);
-    const { text } = (await extract.json()) as { text: string };
+    const extractBody = (await extract.json()) as {
+      text: string; statementDate: string | null; dueDate: string | null; periodStart: string | null; periodEnd: string | null; total: string | null;
+    };
+    const { text } = extractBody;
     expect(text).toBe(CLEANED_LINES);
+    // 帳單日／繳款日／期間／總額也一併抽出，前端用來預填匯入表單（不然通用文字格式一定會被 IMPORT_FIELDS_REQUIRED 卡住）
+    expect(extractBody).toMatchObject({ statementDate: '2026-07-31', dueDate: '2026-08-10', periodStart: '2026-07-01', periodEnd: '2026-07-31', total: '510' });
     // 上游收到的是 OpenAI 相容 chat completions 請求，帶 Bearer key
     const [url, init] = fetchSpy!.mock.calls[0]! as [string, RequestInit];
     expect(String(url)).toBe('https://ai.example.com/v1/chat/completions');

@@ -1,5 +1,5 @@
 import { getAiSettings, getAuditSession, saveAiSettings, type AiSettingsValue, type Db } from '@okane-dokoitta/database';
-import { zAiExplainRequest, zAiExtractRequest, zAiReviewOutput, zAiReviewSessionRequest, zAiSettingsUpdate } from '@okane-dokoitta/schemas';
+import { zAiExplainRequest, zAiExtractOutput, zAiExtractRequest, zAiReviewOutput, zAiReviewSessionRequest, zAiSettingsUpdate } from '@okane-dokoitta/schemas';
 import { Hono, type Context } from 'hono';
 import type { AuthContext } from './auth.js';
 import { decryptSecret, encryptSecret } from './crypto-secrets.js';
@@ -61,25 +61,43 @@ export function aiRoutes(db: Db, env: ApiEnv): Hono<{ Variables: Variables }> {
     }
   });
 
-  // 欄位抽取＋商家正規化（AI-2）：髒文字 → generic-text importer 的既有行格式。
-  // 回傳純文字讓使用者貼回匯入框自己看過再送——AI 不直接進匯入管線。
+  // 欄位抽取＋商家正規化（AI-2）：髒文字 → generic-text importer 的既有行格式，
+  // 順便抽帳單日／繳款日／總額／期間——這些純文字裡沒有欄位可自動判斷，通用文字匯入
+  // 一定會被 IMPORT_FIELDS_REQUIRED 卡住，AI 先抓一次讓使用者不用每次手key。
+  // 回傳的都是預填值，使用者送出前仍可在表單改——AI 不直接進匯入管線。
   app.post('/extract-statement', async (c) => {
     const parsed = zAiExtractRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? '格式錯誤' } }, 422);
     const system = [
-      '你把信用卡帳單或銀行對帳單的髒文字整理成固定格式，每筆交易一行：',
-      '日期|商家|金額|幣別|類型',
+      '你整理信用卡帳單或銀行對帳單的髒文字，只輸出一個 JSON 物件，不要 markdown、不要其他文字：',
+      '{"lines":"逐筆交易，一行一筆，用 \\n 分隔","statementDate":"YYYY-MM-DD 或 null","dueDate":"YYYY-MM-DD 或 null","periodStart":"YYYY-MM-DD 或 null","periodEnd":"YYYY-MM-DD 或 null","total":"本期應繳總額數字或 null"}',
+      '',
+      'lines 每行格式：日期|商家|金額|幣別|類型',
       '規則：日期用 YYYY-MM-DD（民國年要換算西元；沒有年份就依前後文推斷）。',
       '信用卡帳單常見一行印兩個日期（消費日／入帳日或起息日）：一律取消費日、交易發生日這個',
       '（通常是該行最先出現的日期），不要用入帳、起息、過帳這些較晚的日期。',
       '商家名稱正規化：去掉分店代碼、刷卡通路前綴、多餘空白，保留可辨識的品牌名。',
       '金額是數字（可含小數點），退款用負數。幣別用 ISO 代碼（新臺幣=TWD）。',
       '類型只能是：消費、退款、手續費、分期、繳款。點數折抵、優惠折讓這類讓金額變負的調整也算退款。',
-      '只輸出資料行，不要表頭、不要說明、不要 markdown。看不懂的行直接略過。',
+      'lines 只放資料行，不要表頭、不要說明。看不懂的行直接略過。',
+      '',
+      'statementDate＝本期對帳單產生日期（帳單日）；dueDate＝繳款截止日；',
+      'total＝本期應繳總額（不是上期餘額、不是最低應繳）；',
+      'periodStart／periodEnd＝這期帳單涵蓋的消費期間起訖，帳單沒有明講就用 lines 裡最早／最晚的消費日期推斷。',
+      '以上四項找不到就填 null，不要亂猜。',
     ].join('\n');
     try {
       const reply = await chat(db, env, c.get('auth').userId, system, parsed.data.text, 4096);
-      return c.json({ text: reply.trim() });
+      const output = zAiExtractOutput.safeParse(parseAiJson(reply));
+      if (!output.success) throw new Error('AI 整理結果格式無法驗證');
+      return c.json({
+        text: output.data.lines.trim(),
+        statementDate: output.data.statementDate,
+        dueDate: output.data.dueDate,
+        periodStart: output.data.periodStart,
+        periodEnd: output.data.periodEnd,
+        total: output.data.total,
+      });
     } catch (error) {
       return aiError(c, error);
     }
