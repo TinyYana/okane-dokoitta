@@ -48,12 +48,15 @@ export function QuickAddPage() {
     'odk-recent-accounts',
   );
   const transferTargets = active.filter((a) => (a.kind === 'asset' || a.kind === 'liability') && a.subtype !== 'credit_card');
+  // 轉帳的轉出方比 spendable 多開放交割戶（賣股後把現金轉出交割戶）；
+  // 投資資產帳戶仍排除——那要用「賣出」調整持倉，不能用轉帳繞過。
+  const transferSources = active.filter((a) => a.kind === 'asset' && a.subtype !== 'investment_asset');
   const categories = sortByRecent(
     active.filter((a) => a.subtype === (entryType === 'income' ? 'category_income' : 'category_expense')),
     `odk-recent-categories-${entryType}`,
   );
 
-  const sourceList = spendable;
+  const sourceList = entryType === 'transfer' ? transferSources : spendable;
   const selectedAccount = active.find((a) => a.id === (entryType === 'income' ? toAccountId : accountId));
   const currency = selectedAccount?.currency ?? 'TWD';
   const exponent = useMemo(() => currencyInfo(currency).exponent, [currency]);
